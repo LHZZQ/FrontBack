@@ -3,7 +3,7 @@
   "name": "双人前后排 / Front and Back",
   "author": "FrontBack contributors",
   "description": "双人战斗前后排：真实站位、联机换位、游戏设置中自定义伤害倍率（默认 150% / 50%）。",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "has_pck": false,
   "has_dll": true,
   "affects_gameplay": true,

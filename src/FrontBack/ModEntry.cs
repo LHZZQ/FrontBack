@@ -30,7 +30,7 @@ public static class ModEntry
             }
             harmony.PatchAll(Assembly.GetExecutingAssembly());
             Ready = true;
-            GD.Print("[FrontBack] v0.2.0 initialized; settings enabled; target game v0.113.1.");
+            GD.Print("[FrontBack] v0.2.1 initialized; settings enabled; target game v0.113.1.");
         }
         catch (Exception error)
         {
