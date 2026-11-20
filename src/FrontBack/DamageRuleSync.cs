@@ -26,16 +26,18 @@ public sealed class NativeDamageChoiceChannel(PlayerChoiceSynchronizer synchroni
     public Task<PlayerChoiceResult> Receive(Player player, uint id) => synchronizer.WaitForRemoteChoice(player, id);
 }
 
+public sealed record BattleSetup(DamageRules Rules, Rank[] Ranks);
+
 public static class DamageRuleSync
 {
     // 使用原生玩家选择通道：先按同一顺序保留 ID，再发送本机数据，最后等待远端。
     // 不会因房主不是较小 ID、某一端先收到数据或双方本地配置不同而改变结果。
-    public static async Task<DamageRules> ExchangeAsync(IDamageChoiceChannel channel,
+    public static async Task<BattleSetup> ExchangeAsync(IDamageChoiceChannel channel,
         IReadOnlyList<Player> players, ulong localId, NetGameType type, DamageRules localRules,
-        CancellationToken cancellationToken = default)
+        PartyRanks party, CancellationToken cancellationToken = default)
     {
         localRules.Validate();
-        if (type == NetGameType.Singleplayer) return localRules;
+        if (type == NetGameType.Singleplayer) return new BattleSetup(localRules, party.Snapshot());
         var ordered = players.OrderBy(p => p.NetId).ToArray();
         var ids = ordered.Select(channel.Reserve).ToArray();
         var tasks = new Task<PlayerChoiceResult>[ordered.Length];
@@ -43,7 +45,9 @@ public static class DamageRuleSync
         {
             if (ordered[i].NetId == localId && type != NetGameType.Replay)
             {
-                var result = PlayerChoiceResult.FromIndexes(localRules.ToWire(type == NetGameType.Host).ToList());
+                var payload = localRules.ToWire(type == NetGameType.Host).ToList();
+                if (type == NetGameType.Host) payload.AddRange(party.Snapshot().Select(rank => (int)rank));
+                var result = PlayerChoiceResult.FromIndexes(payload);
                 channel.Send(ordered[i], ids[i], result);
                 tasks[i] = Task.FromResult(result);
             }
@@ -51,10 +55,13 @@ public static class DamageRuleSync
         }
         var results = await Task.WhenAll(tasks).WaitAsync(cancellationToken);
         var payloads = results.Select(r => r.AsIndexes()).ToArray();
-        var validated = payloads.Select(p => DamageRules.FromWire(p)).ToArray();
+        var validated = payloads.Select(p => DamageRules.FromWire(p.Take(3).ToArray())).ToArray();
         var hosts = Enumerable.Range(0, payloads.Length).Where(i => payloads[i][2] == 1).ToArray();
         if (hosts.Length != 1) throw new InvalidDataException("前后排同步未找到唯一房主。");
-        return validated[hosts[0]];
+        var snapshot = payloads[hosts[0]].Skip(3).ToArray();
+        if (snapshot.Length != ordered.Length || snapshot.Any(rank => rank is < 0 or > 2))
+            throw new InvalidDataException("房主站位同步数据无效。");
+        return new BattleSetup(validated[hosts[0]], snapshot.Select(rank => (Rank)rank).ToArray());
     }
 }
 
@@ -69,7 +76,7 @@ public static class BeforeCombatRulesPatch
 
     public static bool Prefix(IRunState runState, ICombatState? combatState, ref Task __result)
     {
-        if (!ModEntry.Ready || combatState is null || runState.Players.Count != 2) return true;
+        if (!ModEntry.Ready || combatState is null || !FormationStore.Supports(runState.Players.Count)) return true;
         __result = SynchronizeAndStart(runState, combatState);
         return false;
     }
@@ -82,11 +89,14 @@ public static class BeforeCombatRulesPatch
         manager.NetService.Disconnected += OnDisconnected;
         try
         {
-            var rules = await DamageRuleSync.ExchangeAsync(new NativeDamageChoiceChannel(manager.PlayerChoiceSynchronizer), runState.Players,
-                manager.NetService.NetId, manager.NetService.Type, ModEntry.DamageSettings.Current, disconnected.Token);
-            FormationStore.Get(combat)!.SetRules(rules);
+            var formation = FormationStore.Get(combat)!;
+            SavedRanks.TryRestore(runState, formation.Party);
+            var setup = await DamageRuleSync.ExchangeAsync(new NativeDamageChoiceChannel(manager.PlayerChoiceSynchronizer), runState.Players,
+                manager.NetService.NetId, manager.NetService.Type, ModEntry.DamageSettings.Current, formation.Party, disconnected.Token);
+            formation.Party.Restore(setup.Ranks);
+            formation.SetRules(setup.Rules);
             FormationVisuals.Apply(combat, animate: false);
-            GD.Print($"[FrontBack] combat rules synchronized: front={rules.FrontPercent}% back={rules.BackPercent}%");
+            GD.Print($"[FrontBack] 队伍站位已同步，前排 {setup.Rules.FrontPercent}%，中排 100%，后排 {setup.Rules.BackPercent}%");
         }
         finally { manager.NetService.Disconnected -= OnDisconnected; }
         await Original(runState, combat);

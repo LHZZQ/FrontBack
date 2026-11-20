@@ -1,9 +1,9 @@
 {
   "id": "FrontBack",
-  "name": "双人前后排 / Front and Back",
+  "name": "多人前后排 / Front and Back",
   "author": "FrontBack contributors",
-  "description": "双人战斗前后排：真实站位、联机换位、游戏设置中自定义伤害倍率（默认 150% / 50%）。",
-  "version": "0.2.1",
+  "description": "支持 2–4 人联机。队伍板可拖动头像换排，前/中/后排默认承伤 150% / 100% / 50%。",
+  "version": "0.3.0",
   "has_pck": false,
   "has_dll": true,
   "affects_gameplay": true,

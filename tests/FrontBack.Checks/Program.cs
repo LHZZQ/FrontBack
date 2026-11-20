@@ -46,19 +46,38 @@ static class Checks
     [MethodImpl(MethodImplOptions.NoInlining)]
     public static void Run()
     {
-        var formation = new Formation(22, 11);
-        Equal(11UL, formation.FrontId, "Initial order independent of local perspective");
-        formation.Swap(); formation.Swap();
-        Equal(11UL, formation.FrontId, "Two ordered swap requests return to original");
-        Equal(2, formation.Revision, "Each swap increments revision");
+        ulong[] ids = [11, 22, 33, 44];
+        for (int size = 2; size <= 4; size++)
+        {
+            var ranks = new PartyRanks(ids.Take(size).Reverse());
+            Equal(true, ranks.Snapshot().All(r => r == Rank.Middle), $"{size} players start in middle");
+            Equal(size == 4, ranks.Apply(11, RankOperation.Preset, Lineup.Spread, Rank.Front), "Only four-player parties can use 1/2/1");
+            if (size == 4)
+                Equal(true, ranks.Snapshot().SequenceEqual(new[] { Rank.Front, Rank.Middle, Rank.Middle, Rank.Back }), "Four-player spread is 1/2/1");
+            Equal(true, ranks.Apply(11, RankOperation.Preset, Lineup.Split, Rank.Front), "Split preset applies");
+            Equal(size == 4 ? 2 : 1, ranks.Snapshot().Count(r => r == Rank.Front), "Split uses correct front count");
+            Equal(size == 2 ? 1 : 2, ranks.Snapshot().Count(r => r == Rank.Back), "Split uses correct back count");
+            Equal(true, ranks.Apply(11, RankOperation.Swap, teammate: ranks.Players.First(id => ranks.Get(id) == Rank.Back)), "Swap with an occupied row");
+            var restored = new PartyRanks(ids.Take(size));
+            restored.Restore(ranks.Snapshot());
+            Equal(true, restored.Snapshot().SequenceEqual(ranks.Snapshot()), "Snapshot restores by stable player ID");
+            Equal(true, ranks.Apply(11, RankOperation.Preset, Lineup.Together), "Reset moves every player together");
+            Equal(true, ranks.Snapshot().All(r => r == Rank.Middle), "Everyone returns to middle");
+        }
+        var formation = new Formation(new PartyRanks(ids));
         Equal(1m, formation.Multiplier(999), "Unknown player unaffected");
 
-        var packet = new NetSwapAction { TurnNumber = 70000, RoundNumber = 123 };
+        var packet = new NetSwapAction { TurnNumber = 70000, RoundNumber = 123,
+            Operation = RankOperation.Swap, Rank = Rank.Back, Lineup = Lineup.Spread, Teammate = 76561198000000001UL };
         var writer = new PacketWriter(); packet.Serialize(writer);
         var reader = new PacketReader(); reader.Reset(writer.Buffer);
         var decoded = new NetSwapAction(); decoded.Deserialize(reader);
         Equal(packet.TurnNumber, decoded.TurnNumber, "Native packet turn roundtrip (32 bits)");
         Equal(packet.RoundNumber, decoded.RoundNumber, "Native packet round roundtrip");
+        Equal(packet.Operation, decoded.Operation, "Operation serializes");
+        Equal(packet.Rank, decoded.Rank, "Rank serializes");
+        Equal(packet.Lineup, decoded.Lineup, "Lineup serializes");
+        Equal(packet.Teammate, decoded.Teammate, "Full Steam ID serializes");
 
         var first = (Player)RuntimeHelpers.GetUninitializedObject(typeof(Player));
         var second = (Player)RuntimeHelpers.GetUninitializedObject(typeof(Player));
@@ -95,8 +114,13 @@ static class Checks
             ModifyDamageHookType hooks = ModifyDamageHookType.All) =>
             (decimal)hook.Invoke(null, new object?[] { run, combat, target, dealer ?? monster,
                 amount, props, null, null, hooks, null })!;
+        var party = FormationStore.Get(combat)!.Party;
+        Equal(20m, Damage(20), "Actual game hook: new party takes 100% damage");
+        party.Apply(11, RankOperation.Preset, Lineup.Split, Rank.Front);
         Equal(30m, Damage(20), "Actual game hook: front 20 -> 30 before block");
-        FormationStore.Get(combat)!.Swap();
+        var nextCombat = Stub.Create<ICombatState>((method, _) => method.Name == "get_RunState" ? run : throw new NotSupportedException());
+        Equal(1.5m, FormationStore.Get(nextCombat)!.Multiplier(11), "Selected rank carries over into next battle");
+        party.Apply(11, RankOperation.Swap, teammate: 22);
         Equal(10m, Damage(20), "Actual game hook after swap: back 20 -> 10");
         Equal(2.5m, Damage(5), "Hook retains fraction for vanilla rounding");
         Equal(20m, Damage(20, target), "Player self damage unaffected");
@@ -115,7 +139,7 @@ static class Checks
         Equal(true, FormationStore.Get(null) is null, "No combat leaves damage unchanged");
         FormationStore.Get(combat)!.SetRules(new DamageRules { FrontPercent = 250.5m, BackPercent = 25.5m });
         Equal(5.1m, Damage(20), "Custom back percentage reaches actual damage hook");
-        FormationStore.Get(combat)!.Swap();
+        party.Apply(11, RankOperation.Swap, teammate: 22);
         Equal(50.1m, Damage(20), "Custom front percentage reaches actual damage hook");
         var intangible = (MegaCrit.Sts2.Core.Models.Powers.IntangiblePower)RuntimeHelpers.GetUninitializedObject(
             typeof(MegaCrit.Sts2.Core.Models.Powers.IntangiblePower));

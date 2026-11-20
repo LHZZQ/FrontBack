@@ -7,8 +7,6 @@ public sealed class VisualConfig
 {
     public float RowOffsetY { get; set; } = 35;
     public double SwapAnimationSeconds { get; set; } = 0.2;
-    public float ButtonX { get; set; } = 24;
-    public float ButtonY { get; set; } = 180;
 
     public static VisualConfig Load(string directory)
     {
@@ -16,8 +14,7 @@ public sealed class VisualConfig
         if (!File.Exists(path)) return new();
         var config = JsonSerializer.Deserialize<VisualConfig>(File.ReadAllText(path)) ?? new();
         if (!float.IsFinite(config.RowOffsetY) || Math.Abs(config.RowOffsetY) > 100 ||
-            !double.IsFinite(config.SwapAnimationSeconds) || config.SwapAnimationSeconds is < 0 or > 1 ||
-            !float.IsFinite(config.ButtonX) || !float.IsFinite(config.ButtonY))
+            !double.IsFinite(config.SwapAnimationSeconds) || config.SwapAnimationSeconds is < 0 or > 1)
             throw new InvalidDataException("FrontBack.config.json 中的画面参数无效。");
         return config;
     }

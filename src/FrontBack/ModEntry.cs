@@ -5,6 +5,7 @@ using HarmonyLib;
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Modding;
+using MegaCrit.Sts2.Core.Runs;
 
 namespace FrontBack;
 
@@ -30,7 +31,7 @@ public static class ModEntry
             }
             harmony.PatchAll(Assembly.GetExecutingAssembly());
             Ready = true;
-            GD.Print("[FrontBack] v0.2.1 initialized; settings enabled; target game v0.113.1.");
+            GD.Print("[FrontBack] v0.3.0 initialized; formation board for 2–4 players; target game v0.113.1.");
         }
         catch (Exception error)
         {
@@ -44,17 +45,19 @@ public static class ModEntry
 public static class FormationStore
 {
     private static readonly ConditionalWeakTable<ICombatState, Formation> States = new();
+    private static readonly ConditionalWeakTable<IRunState, PartyRanks> Parties = new();
+
+    public static bool Supports(int playerCount) => playerCount is >= 2 and <= 4;
 
     public static Formation? Get(ICombatState? combat)
     {
-        // 用整局玩家数量判断，死亡不会使双人模式中途失效。
-        if (combat?.RunState.Players.Count != 2) return null;
+        if (combat is null || !Supports(combat.RunState.Players.Count)) return null;
         return States.GetValue(combat, c =>
-            new Formation(c.RunState.Players[0].NetId, c.RunState.Players[1].NetId));
+            new Formation(Parties.GetValue(c.RunState, run => new PartyRanks(run.Players.Select(p => p.NetId)))));
     }
 
     public static bool CanSwap(ICombatState combat, Player player) =>
-        ModEntry.Ready && Get(combat) is not null &&
-        combat.Players.Count == 2 && combat.Players.All(p => p.Creature.IsAlive) &&
-        player.PlayerCombatState?.Phase == PlayerTurnPhase.Play;
+        ModEntry.Ready && Get(combat) is not null && player.Creature.IsAlive &&
+        player.PlayerCombatState?.Phase == PlayerTurnPhase.Play &&
+        !CombatManager.Instance.IsPlayerReadyToEndTurn(player);
 }
