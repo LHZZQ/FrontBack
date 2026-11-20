@@ -14,6 +14,7 @@ public static class ModEntry
     public const string Id = "FrontBack";
     public static bool Ready { get; private set; }
     public static VisualConfig Config { get; private set; } = new();
+    public static DamageSettingsStore DamageSettings { get; private set; } = null!;
 
     public static void Initialize()
     {
@@ -21,9 +22,15 @@ public static class ModEntry
         try
         {
             Config = VisualConfig.Load(Path.GetDirectoryName(typeof(ModEntry).Assembly.Location)!);
+            DamageSettings = new DamageSettingsStore(Path.Combine(OS.GetUserDataDir(), "mod_data", Id, "damage-settings.json"));
+            try { DamageSettings.Load(); }
+            catch (Exception error) when (error is IOException or System.Text.Json.JsonException or InvalidDataException or UnauthorizedAccessException)
+            {
+                GD.PushWarning($"[FrontBack] Cannot read damage settings; using 150% / 50%: {error.Message}");
+            }
             harmony.PatchAll(Assembly.GetExecutingAssembly());
             Ready = true;
-            GD.Print("[FrontBack] v0.1.0 initialized; target game v0.113.1; damage before caps.");
+            GD.Print("[FrontBack] v0.2.0 initialized; settings enabled; target game v0.113.1.");
         }
         catch (Exception error)
         {

@@ -36,7 +36,9 @@ public static class CombatOverlay
             panel.Visible = formation is not null;
             if (formation is null || player is null || combat is null) return;
             button.Disabled = !FormationStore.CanSwap(combat, player);
-            status.Text = $"你在{(formation.FrontId == player.NetId ? "前排 ×1.5" : "后排 ×0.5")}\n双方可换位 · 次数不限";
+            var isFront = formation.FrontId == player.NetId;
+            var percent = isFront ? formation.Rules.FrontPercent : formation.Rules.BackPercent;
+            status.Text = $"你在{(isFront ? "前排" : "后排")} {percent:0.#}%\n双方可换位 · 次数不限";
         }
         button.Pressed += () =>
         {

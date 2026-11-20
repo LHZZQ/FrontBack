@@ -72,7 +72,7 @@ public static class FormationVisuals
                     MouseFilter = Control.MouseFilterEnum.Ignore };
                 node.AddChild(label);
             }
-            label.Text = isFront ? "前排 ×1.5" : "后排 ×0.5";
+            label.Text = isFront ? $"前排 {formation.Rules.FrontPercent:0.#}%" : $"后排 {formation.Rules.BackPercent:0.#}%";
         }
     }
 }

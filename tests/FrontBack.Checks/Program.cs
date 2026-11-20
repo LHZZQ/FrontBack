@@ -65,10 +65,12 @@ static class Checks
         Field(first, "<NetId>k__BackingField", 11UL);
         Field(second, "<NetId>k__BackingField", 22UL);
         var listeners = new List<AbstractModel>();
-        var run = Stub.Create<IRunState>((method, _) => method.Name switch
+        var run = Stub.Create<IRunState>((method, arguments) => method.Name switch
         {
             "get_Players" => new List<Player> { first, second },
             "IterateHookListeners" => listeners,
+            "GetPlayerSlotIndex" => ReferenceEquals(arguments![0], first) ? 0 : 1,
+            "GetPlayer" => (ulong)arguments![0]! == first.NetId ? first : second,
             _ => throw new NotSupportedException(method.Name)
         });
         var combat = Stub.Create<ICombatState>((method, _) => method.Name switch
@@ -85,7 +87,9 @@ static class Checks
         // 对本机真实 Hook 方法安装补丁并调用，验证插入位置与有效 IL，而非只测倍率函数。
         var harmony = new Harmony("FrontBack.Checks");
         harmony.PatchAll(typeof(ModEntry).Assembly);
-        Equal(true, harmony.GetPatchedMethods().Count() == 3, "All three game integration patches installed");
+        Equal(true, harmony.GetPatchedMethods().Count() == 5, "All five game integration patches installed");
+        BeforeCombatRulesPatch.Original(run, combat).GetAwaiter().GetResult();
+        Equal(true, true, "Reverse patch invokes original pre-combat hooks without recursion");
         var hook = AccessTools.Method(typeof(Hook), "ModifyDamageInternal");
         decimal Damage(decimal amount, Creature? dealer = null, ValueProp props = ValueProp.Move,
             ModifyDamageHookType hooks = ModifyDamageHookType.All) =>
@@ -109,13 +113,17 @@ static class Checks
         target.LoseHpInternal(Damage(5), ValueProp.Move);
         Equal(98, target.CurrentHp, "Vanilla rounding: back 5 loses 2 HP");
         Equal(true, FormationStore.Get(null) is null, "No combat leaves damage unchanged");
+        FormationStore.Get(combat)!.SetRules(new DamageRules { FrontPercent = 250.5m, BackPercent = 25.5m });
+        Equal(5.1m, Damage(20), "Custom back percentage reaches actual damage hook");
         FormationStore.Get(combat)!.Swap();
+        Equal(50.1m, Damage(20), "Custom front percentage reaches actual damage hook");
         var intangible = (MegaCrit.Sts2.Core.Models.Powers.IntangiblePower)RuntimeHelpers.GetUninitializedObject(
             typeof(MegaCrit.Sts2.Core.Models.Powers.IntangiblePower));
         typeof(AbstractModel).GetField("<IsMutable>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(intangible, true);
         typeof(PowerModel).GetField("_owner", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(intangible, target);
         listeners.Add(intangible);
         Equal(1m, Damage(20), "Actual Intangible cap remains 1 for front row");
+        SyncChecks.Run(first, second, run, (condition, name) => Equal(true, condition, name));
         harmony.UnpatchAll("FrontBack.Checks");
         Console.WriteLine($"{count} checks passed. In-game animation and two-peer networking remain manual tests.");
     }

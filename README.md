@@ -1,8 +1,8 @@
-# 双人前后排 Mod · v0.1.0 实验原型
+# 双人前后排 Mod · v0.2.0 实验原型
 
-目标：《杀戮尖塔2》双人联机中，两个角色在画面上真实前后站立；双方通过按钮交换位置，前排受到怪物攻击伤害 ×1.5，后排 ×0.5。
+目标：《杀戮尖塔2》双人联机中，两个角色在画面上真实前后站立；双方通过按钮交换位置，默认前排受到怪物攻击伤害 ×1.5，后排 ×0.5，可在游戏设置中调整。
 
-**当前状态：已编译，并通过本机程序集自动检查；尚未完成测试。不是已验证的稳定发布版。**
+**当前状态：已编译，29 项自动检查通过；设置界面和真实双端联机仍待游戏内验证。不是已验证的稳定发布版。**
 
 ## 1. 本机环境
 
@@ -11,7 +11,7 @@
 - Steam：`public-beta` 分支，build ID `26660232`。
 - 游戏使用 .NET 9；本机 SDK 为 .NET 10.0.402，可以编译 net9.0。
 - 自动检查使用项目内 `.tools/runtime9` 的 .NET 9.0.7，与本机游戏一致。
-- 直接引用本机 `sts2.dll`、`GodotSharp.dll`、`0Harmony.dll`。原型不依赖 BaseLib，不需要导出 PCK，也不需要启动 Godot 编辑器。
+- 直接引用游戏自带的 `sts2.dll`、`GodotSharp.dll`、`0Harmony.dll`。**玩家无需安装 BaseLib、KitLib、RitsuLib 或其他前置 Mod。** 不需要导出 PCK，也不需要启动 Godot 编辑器。双方需要相同版本的游戏和本 Mod。
 
 社区模板可以参考，但接口以本机程序集核对结果为准。升级游戏后必须重新编译和测试。
 
@@ -39,7 +39,11 @@
 
 ## 4. 配置和重新编译
 
-`FrontBack.config.json` 只控制本地画面：`RowOffsetY` 是上下错位距离，`SwapAnimationSeconds` 是动画秒数，`ButtonX/Y` 是按钮位置。修改后重启。伤害倍率按需求固定，避免双方本地配置产生不同伤害。
+游戏内打开 **设置 → 常规 → 前后排伤害设置 / FrontBack**（位于常规设置列表底部），分别输入前排、后排百分比后点击“保存”。支持 0–10000%，精确到 0.1%；100% 为原版伤害，0% 为免除此类怪物攻击伤害。可恢复默认 150% / 50%。
+
+每场双人战斗开始前，使用游戏原生玩家选择通道同步房主设置，双方接收同一份战斗倍率后才继续原版开战效果。保存新数值从下一场战斗开始生效，当前战斗的倍率保持不变。客机保存自己的偏好，供以后自己当房主使用。战斗标签和状态文字显示当前战斗实际倍率。
+
+伤害设置保存在游戏用户数据目录的 `mod_data/FrontBack/damage-settings.json`，不放在 Mod 安装目录，替换 Mod 文件时会保留。`FrontBack.config.json` 仍只控制本地画面：`RowOffsetY` 是上下错位距离，`SwapAnimationSeconds` 是动画秒数，`ButtonX/Y` 是按钮位置；修改后重启。
 
 需要重新编译时，在项目目录的 PowerShell 运行：
 
@@ -55,8 +59,8 @@ powershell -ExecutionPolicy Bypass -File .\scripts\Package.ps1
 
 ## 5. 下一阶段和发布条件
 
-详见 `docs/验证清单.md`。必须先完成双端实测，重点覆盖同时点击、攻击/受击动画、宠物与复活、窗口缩放、易伤/虚弱、多段与群体攻击。当前没有增加站位专用存档字段或校验和字段；战斗重建会重置站位，断线重连、战斗回放和其他 Mod 的兼容性还未验证。
+必须先完成双端实测，重点覆盖倍率同步、同时点击、攻击/受击动画、宠物与复活、窗口缩放、易伤/虚弱、多段与群体攻击。当前没有增加站位专用存档字段或校验和字段；战斗重建会重置站位，断线重连、战斗回放和其他 Mod 的兼容性还未验证。
 
 完成这些测试后，再补联机诊断、必要的状态恢复、UI 适配与版本支持说明，制作创意工坊预览图。随后使用 Mega Crit 官方 `sts2-mod-uploader` 准备上传工作区、填写 `workshop.json` 并上传；本原型尚未上传 Steam 创意工坊。
 
-参考：[社区 Mod 模板](https://github.com/Alchyr/ModTemplate-StS2)、[BaseLib](https://github.com/Alchyr/BaseLib-StS2)、[Mega Crit 官方上传工具](https://github.com/megacrit/sts2-mod-uploader)。详细接口依据见 `docs/接口核查.md`。
+参考：[社区 Mod 模板](https://github.com/Alchyr/ModTemplate-StS2)、[Mega Crit 官方上传工具](https://github.com/megacrit/sts2-mod-uploader)。

@@ -7,6 +7,7 @@ public sealed class Formation
     public ulong SecondId { get; }
     public ulong FrontId { get; private set; }
     public int Revision { get; private set; }
+    public DamageRules Rules { get; private set; } = new();
 
     public Formation(ulong first, ulong second)
     {
@@ -17,7 +18,14 @@ public sealed class Formation
     }
 
     public bool Contains(ulong id) => id == FirstId || id == SecondId;
-    public decimal Multiplier(ulong id) => !Contains(id) ? 1m : id == FrontId ? 1.5m : 0.5m;
+    public decimal Multiplier(ulong id) => !Contains(id) ? 1m :
+        (id == FrontId ? Rules.FrontPercent : Rules.BackPercent) / 100m;
+
+    public void SetRules(DamageRules rules)
+    {
+        rules.Validate();
+        Rules = rules;
+    }
 
     public void Swap()
     {
