@@ -4,6 +4,7 @@ using HarmonyLib;
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Nodes.Combat;
 using MegaCrit.Sts2.Core.Nodes.Rooms;
+using MegaCrit.Sts2.Core.Nodes.Screens.Map;
 
 namespace FrontBack;
 
@@ -106,6 +107,18 @@ public static class FormationVisuals
             badge.Resized += Reposition;
             node.Hitbox.ItemRectChanged += Reposition;
             Reposition();
+
+            if (NMapScreen.Instance is { } map)
+            {
+                // 地图关闭动画结束后才会隐藏，徽章跟随实际可见状态。
+                void UpdateVisibility() => badgeNode.Visible = !map.IsVisibleInTree();
+                map.VisibilityChanged += UpdateVisibility;
+                badge.TreeExiting += () =>
+                {
+                    if (GodotObject.IsInstanceValid(map)) map.VisibilityChanged -= UpdateVisibility;
+                };
+                UpdateVisibility();
+            }
         }
         var color = RankStyle.Color(rank);
         badge.AddThemeStyleboxOverride("panel", RankStyle.Frame(color.Darkened(0.78f), color, 7, 3));
