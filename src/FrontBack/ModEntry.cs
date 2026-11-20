@@ -31,7 +31,7 @@ public static class ModEntry
             }
             harmony.PatchAll(Assembly.GetExecutingAssembly());
             Ready = true;
-            GD.Print("[FrontBack] v0.3.0 initialized; formation board for 2–4 players; target game v0.113.1.");
+            GD.Print("[FrontBack] v0.3.1 initialized; formation board for 2–4 players; target game v0.113.1.");
         }
         catch (Exception error)
         {

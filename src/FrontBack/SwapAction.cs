@@ -26,6 +26,7 @@ public sealed class SwapAction(Player player, NetSwapAction request) : GameActio
         var formation = FormationStore.Get(combat)!;
         if (formation.Party.Apply(player.NetId, request.Operation, request.Lineup, request.Rank, request.Teammate))
         {
+            AttackIntentDisplay.Refresh(combat);
             SavedRanks.TrySave(combat.RunState, formation.Party);
             FormationVisuals.Apply(combat, animate: true);
         }

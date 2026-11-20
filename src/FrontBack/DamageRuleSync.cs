@@ -96,6 +96,7 @@ public static class BeforeCombatRulesPatch
             formation.Party.Restore(setup.Ranks);
             formation.SetRules(setup.Rules);
             FormationVisuals.Apply(combat, animate: false);
+            AttackIntentDisplay.Refresh(combat);
             GD.Print($"[FrontBack] 队伍站位已同步，前排 {setup.Rules.FrontPercent}%，中排 100%，后排 {setup.Rules.BackPercent}%");
         }
         finally { manager.NetService.Disconnected -= OnDisconnected; }
