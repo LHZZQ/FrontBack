@@ -1,7 +1,7 @@
 {
   "id": "FrontBack",
   "name": "多人前后排 / Front and Back",
-  "author": "FrontBack contributors",
+  "author": "Duktig_Yang",
   "description": "支持 2–4 人联机。队伍板可拖动头像换排，前/中/后排默认承伤 150% / 100% / 50%。",
   "version": "0.3.0",
   "has_pck": false,
