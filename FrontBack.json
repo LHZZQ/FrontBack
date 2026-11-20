@@ -1,0 +1,12 @@
+{
+  "id": "FrontBack",
+  "name": "双人前后排 / Front and Back",
+  "author": "FrontBack contributors",
+  "description": "双人战斗前后排原型：真实站位、联机换位、怪物伤害 150% / 50%。",
+  "version": "0.1.0",
+  "has_pck": false,
+  "has_dll": true,
+  "affects_gameplay": true,
+  "min_game_version": "0.113.1",
+  "dependencies": []
+}

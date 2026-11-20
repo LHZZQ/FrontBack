@@ -1,0 +1,14 @@
+.tools/
+.inspection/
+**/bin/
+**/obj/
+dist/
+local.props
+*.user
+*.log
+*.dll
+*.pck
+*.zip
+.vs/
+.env
+.env.*
