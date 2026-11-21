@@ -2,9 +2,13 @@ using System.Runtime.CompilerServices;
 using Godot;
 using HarmonyLib;
 using MegaCrit.Sts2.Core.Combat;
+using MegaCrit.Sts2.Core.Context;
+using MegaCrit.Sts2.Core.Entities.Creatures;
+using MegaCrit.Sts2.Core.Models.Monsters;
 using MegaCrit.Sts2.Core.Nodes.Combat;
 using MegaCrit.Sts2.Core.Nodes.Rooms;
 using MegaCrit.Sts2.Core.Nodes.Screens.Map;
+using MegaCrit.Sts2.Core.Nodes.Screens.ScreenContext;
 
 namespace FrontBack;
 
@@ -92,7 +96,7 @@ public static class FormationVisuals
         var badge = node.GetNodeOrNull<PanelContainer>("FrontBackRole");
         if (badge is null)
         {
-            badge = new PanelContainer { Name = "FrontBackRole", MouseFilter = Control.MouseFilterEnum.Ignore,
+            badge = new PanelContainer { Name = "FrontBackRole", Visible = false, MouseFilter = Control.MouseFilterEnum.Ignore,
                 ZAsRelative = false, ZIndex = 8 };
             badge.AddChild(new Label { MouseFilter = Control.MouseFilterEnum.Ignore,
                 HorizontalAlignment = HorizontalAlignment.Center });
@@ -108,17 +112,10 @@ public static class FormationVisuals
             node.Hitbox.ItemRectChanged += Reposition;
             Reposition();
 
-            if (NMapScreen.Instance is { } map)
-            {
-                // 地图关闭动画结束后才会隐藏，徽章跟随实际可见状态。
-                void UpdateVisibility() => badgeNode.Visible = !map.IsVisibleInTree();
-                map.VisibilityChanged += UpdateVisibility;
-                badge.TreeExiting += () =>
-                {
-                    if (GodotObject.IsInstanceValid(map)) map.VisibilityChanged -= UpdateVisibility;
-                };
-                UpdateVisibility();
-            }
+            Node? ancestor = node.GetParent();
+            while (ancestor is not null && ancestor is not NCombatRoom) ancestor = ancestor.GetParent();
+            if (ancestor is NCombatRoom room)
+                WatchCombatForeground(room, badgeNode, foreground => badgeNode.Visible = foreground);
         }
         var color = RankStyle.Color(rank);
         badge.AddThemeStyleboxOverride("panel", RankStyle.Frame(color.Darkened(0.78f), color, 7, 3));
@@ -128,10 +125,48 @@ public static class FormationVisuals
         text.AddThemeFontSizeOverride("font_size", 19);
         badge.ResetSize();
     }
+
+    internal static void WatchCombatForeground(NCombatRoom room, CanvasItem item, Action<bool> update)
+    {
+        var screens = ActiveScreenContext.Instance;
+        var map = NMapScreen.Instance;
+        void Refresh()
+        {
+            // 地图关闭动画结束后才会隐藏，战斗界面等地图收起后再恢复。
+            bool mapVisible = map is not null && GodotObject.IsInstanceValid(map) && map.IsVisibleInTree();
+            update(!mapVisible && screens.IsCurrent(room));
+        }
+
+        screens.Updated += Refresh;
+        if (map is not null) map.VisibilityChanged += Refresh;
+        item.TreeExiting += () =>
+        {
+            screens.Updated -= Refresh;
+            if (map is not null && GodotObject.IsInstanceValid(map)) map.VisibilityChanged -= Refresh;
+        };
+        Refresh();
+    }
 }
 
 [HarmonyPatch(typeof(NCombatRoom), nameof(NCombatRoom.PositionPlayersAndPets))]
 public static class LayoutPatch
 {
     public static void Postfix(List<NCreature> creatureNodes) => FormationVisuals.Capture(creatureNodes);
+}
+
+[HarmonyPatch(typeof(NCombatRoom), nameof(NCombatRoom.AddCreature))]
+internal static class OstyHealthBarPatch
+{
+    private static void Postfix(NCombatRoom __instance, Creature creature)
+    {
+        if (!ModEntry.Ready || creature.Monster is not Osty || creature.PetOwner is not { } owner ||
+            !LocalContext.IsMe(owner) || FormationStore.Get(creature.CombatState) is null ||
+            __instance.GetCreatureNode(creature)?.GetNodeOrNull<NCreatureStateDisplay>("%HealthBar") is not { } healthBar)
+            return;
+
+        int originalZ = healthBar.ZIndex;
+        // 战斗中血条画在前排角色的 +1 层之上，其他界面恢复原版层级。
+        FormationVisuals.WatchCombatForeground(__instance, healthBar,
+            foreground => healthBar.ZIndex = foreground ? Math.Max(originalZ, 2) : originalZ);
+    }
 }

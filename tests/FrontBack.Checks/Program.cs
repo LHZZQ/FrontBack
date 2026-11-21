@@ -4,10 +4,13 @@ using System.Runtime.Loader;
 using FrontBack;
 using HarmonyLib;
 using MegaCrit.Sts2.Core.Combat;
+using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Hooks;
 using MegaCrit.Sts2.Core.Models;
+using MegaCrit.Sts2.Core.Models.Powers;
+using MegaCrit.Sts2.Core.MonsterMoves.Intents;
 using MegaCrit.Sts2.Core.Multiplayer.Serialization;
 using MegaCrit.Sts2.Core.Runs;
 using MegaCrit.Sts2.Core.ValueProps;
@@ -92,9 +95,10 @@ static class Checks
             "GetPlayer" => (ulong)arguments![0]! == first.NetId ? first : second,
             _ => throw new NotSupportedException(method.Name)
         });
-        var combat = Stub.Create<ICombatState>((method, _) => method.Name switch
+        var combat = Stub.Create<ICombatState>((method, arguments) => method.Name switch
         {
             "get_RunState" => run,
+            "GetPlayer" => (ulong)arguments![0]! == first.NetId ? first : second,
             _ => throw new NotSupportedException(method.Name)
         });
         var target = (Creature)RuntimeHelpers.GetUninitializedObject(typeof(Creature));
@@ -106,7 +110,7 @@ static class Checks
         // 对本机真实 Hook 方法安装补丁并调用，验证插入位置与有效 IL，而非只测倍率函数。
         var harmony = new Harmony("FrontBack.Checks");
         harmony.PatchAll(typeof(ModEntry).Assembly);
-        Equal(true, harmony.GetPatchedMethods().Count() == 5, "All five game integration patches installed");
+        Equal(10, harmony.GetPatchedMethods().Count(), "All game integration patches installed");
         BeforeCombatRulesPatch.Original(run, combat).GetAwaiter().GetResult();
         Equal(true, true, "Reverse patch invokes original pre-combat hooks without recursion");
         var hook = AccessTools.Method(typeof(Hook), "ModifyDamageInternal");
@@ -147,8 +151,74 @@ static class Checks
         typeof(PowerModel).GetField("_owner", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(intangible, target);
         listeners.Add(intangible);
         Equal(1m, Damage(20), "Actual Intangible cap remains 1 for front row");
+        listeners.Clear();
+        CheckIntercept(run, combat, first, second, target, monster, listeners, hook);
         SyncChecks.Run(first, second, run, (condition, name) => Equal(true, condition, name));
         harmony.UnpatchAll("FrontBack.Checks");
         Console.WriteLine($"{count} checks passed. In-game animation and two-peer networking remain manual tests.");
+    }
+
+    private static void CheckIntercept(IRunState run, ICombatState combat, Player local, Player teammate,
+        Creature covered, Creature monster, List<AbstractModel> listeners, MethodInfo damageHook)
+    {
+        var recipient = (Creature)RuntimeHelpers.GetUninitializedObject(typeof(Creature));
+        Field(recipient, "<Player>k__BackingField", teammate);
+        Field(recipient, "_currentHp", 70);
+        Field(local, "<Creature>k__BackingField", covered);
+        Field(teammate, "<Creature>k__BackingField", recipient);
+        Field(local, "_runState", run);
+        Field(teammate, "_runState", run);
+        Field(local, "_relics", new List<RelicModel>());
+        Field(teammate, "_relics", new List<RelicModel>());
+        covered.CombatState = combat;
+        recipient.CombatState = combat;
+        monster.CombatState = combat;
+
+        T Power<T>(Creature owner, Creature? applier = null) where T : PowerModel
+        {
+            var power = (T)RuntimeHelpers.GetUninitializedObject(typeof(T));
+            typeof(AbstractModel).GetField("<IsMutable>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(power, true);
+            typeof(PowerModel).GetField("_owner", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(power, owner);
+            power.Applier = applier;
+            listeners.Add(power);
+            return power;
+        }
+
+        var cover = Power<CoveredPower>(covered, recipient);
+        var intercept = Power<InterceptPower>(recipient);
+        var data = AccessTools.Method(typeof(InterceptPower), "InitInternalData").Invoke(intercept, null)!;
+        ((List<Creature>)AccessTools.Field(data.GetType(), "coveredCreatures").GetValue(data)!).Add(covered);
+        AccessTools.Field(typeof(PowerModel), "_internalData").SetValue(intercept, data);
+        Field(covered, "_powers", new List<PowerModel> { cover });
+        Field(recipient, "_powers", new List<PowerModel> { intercept });
+        var weak = Power<WeakPower>(monster);
+        Field(monster, "_powers", new List<PowerModel> { weak });
+
+        var formation = FormationStore.Get(combat)!;
+        formation.SetRules(new DamageRules());
+        LocalContext.NetId = local.NetId;
+        var intent = new SingleAttackIntent(24);
+        Creature[] targets = [covered, recipient];
+        decimal Actual(Creature creature) => (decimal)damageHook.Invoke(null,
+            new object?[] { run, combat, creature, monster, 24m, ValueProp.Move, null, null, ModifyDamageHookType.All, null })!;
+
+        Equal(9, intent.GetSingleDamage(targets, monster), "Weak attack: protected front player previews back teammate taking 9 for them");
+        Equal(0m, Actual(covered), "Intercept still prevents direct damage to the protected player");
+        Equal(18m, Actual(recipient), "Back interceptor still takes both shares in the original damage calculation");
+        Field(recipient, "_block", 9);
+        var incoming = Actual(recipient);
+        var blocked = recipient.DamageBlockInternal(incoming, ValueProp.Move);
+        Equal(9m, incoming - blocked, "Back interceptor with 9 block loses 9 HP from both shares");
+        formation.Party.Apply(local.NetId, RankOperation.Swap, teammate: teammate.NetId);
+        Equal(27, intent.GetSingleDamage(targets, monster), "Weak attack: protected back player previews front teammate taking 27 for them");
+        Equal(54, new MultiAttackIntent(24, 2).GetTotalDamage(targets, monster), "Multi-hit intent retains its original repeat count");
+        Equal(54m, Actual(recipient), "Front interceptor still takes both shares in the original damage calculation");
+        Power<IntangiblePower>(recipient);
+        Equal(1, intent.GetSingleDamage(targets, monster), "Intercept preview applies the receiving teammate's damage cap");
+        listeners.Remove(cover);
+        ((List<PowerModel>)covered.Powers).Remove(cover);
+        Equal(9, intent.GetSingleDamage(targets, monster), "Expired cover restores the local player's normal preview");
+        LocalContext.NetId = null;
+        listeners.Clear();
     }
 }
