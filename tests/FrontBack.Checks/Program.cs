@@ -213,6 +213,23 @@ static class Checks
         Equal(27, intent.GetSingleDamage(targets, monster), "Weak attack: protected back player previews front teammate taking 27 for them");
         Equal(54, new MultiAttackIntent(24, 2).GetTotalDamage(targets, monster), "Multi-hit intent retains its original repeat count");
         Equal(54m, Actual(recipient), "Front interceptor still takes both shares in the original damage calculation");
+        var mintyDisplay = typeof(ModEntry).Assembly.GetType("FrontBack.MintyDamageDisplay", throwOnError: true)!;
+        var beginPersonalDamage = AccessTools.Method(mintyDisplay, "BeginPersonalDamage");
+        var endPersonalDamage = AccessTools.Method(mintyDisplay, "EndPersonalDamage");
+        object?[] personalScope = [null];
+        beginPersonalDamage.Invoke(null, personalScope);
+        try
+        {
+            Equal(0, intent.GetTotalDamage([covered], monster), "Minty counts zero personal attack damage while the local player is covered");
+            LocalContext.NetId = teammate.NetId;
+            Equal(54, intent.GetTotalDamage([recipient], monster), "Minty counts both shares for the interceptor's own health bar");
+        }
+        finally
+        {
+            endPersonalDamage.Invoke(null, personalScope);
+            LocalContext.NetId = local.NetId;
+        }
+        Equal(27, intent.GetSingleDamage(targets, monster), "Enemy intent still shows the teammate's share after the personal total is calculated");
         Power<IntangiblePower>(recipient);
         Equal(1, intent.GetSingleDamage(targets, monster), "Intercept preview applies the receiving teammate's damage cap");
         listeners.Remove(cover);

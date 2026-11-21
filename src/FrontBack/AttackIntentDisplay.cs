@@ -34,6 +34,7 @@ internal static class AttackIntentDisplay
             foreach (var (icon, intent) in icons.Zip(move.Intents))
                 if (intent is AttackIntent) icon.UpdateIntent(intent, targets, enemy);
         }
+        MintyDamageDisplay.Refresh(combat);
     }
 }
 
@@ -47,7 +48,7 @@ internal static class InterceptIntentPatch
     private static bool Prefix(AttackIntent __instance, Creature owner, ref int __result)
     {
         var combat = owner.CombatState;
-        if (!ModEntry.Ready || !owner.IsMonster || FormationStore.Get(combat) is null ||
+        if (!ModEntry.Ready || MintyDamageDisplay.CalculatingPersonalDamage || !owner.IsMonster || FormationStore.Get(combat) is null ||
             LocalContext.GetMe(combat)?.Creature is not { } covered || __instance.DamageCalc is not { } calculate)
             return true;
 
