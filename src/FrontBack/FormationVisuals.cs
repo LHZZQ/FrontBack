@@ -9,6 +9,7 @@ using MegaCrit.Sts2.Core.Nodes.Combat;
 using MegaCrit.Sts2.Core.Nodes.Rooms;
 using MegaCrit.Sts2.Core.Nodes.Screens.Map;
 using MegaCrit.Sts2.Core.Nodes.Screens.ScreenContext;
+using MegaCrit.Sts2.Core.Rooms;
 
 namespace FrontBack;
 
@@ -21,17 +22,28 @@ public static class FormationVisuals
         public readonly int OriginalZ = node.ZIndex;
         public Vector2 Offset;
         public Tween? Tween;
+
+        public void StopTween()
+        {
+            if (GodotObject.IsInstanceValid(Tween)) Tween!.Kill();
+            Tween = null;
+        }
     }
 
     private static readonly ConditionalWeakTable<ICombatState, List<Placement>> Layouts = new();
 
     public static void Capture(List<NCreature> nodes)
     {
-        var combat = nodes.FirstOrDefault(n => n.Entity.IsPlayer)?.Entity.CombatState;
-        if (combat is null || FormationStore.Get(combat) is null) return;
+        var player = nodes.FirstOrDefault(n => n.Entity.IsPlayer);
+        if (!ModEntry.Ready || player?.Entity.CombatState is not { } combat ||
+            FindRoom(player)?.Mode == CombatRoomMode.FinishedCombat || FormationStore.Get(combat) is null) return;
         if (Layouts.TryGetValue(combat, out var old))
             foreach (var entry in old)
-                if (GodotObject.IsInstanceValid(entry.Tween)) entry.Tween!.Kill();
+            {
+                entry.StopTween();
+                // 原版刚重新摆放过坐标，重抓布局前只需还原旧绘制层级。
+                if (GodotObject.IsInstanceValid(entry.Node)) entry.Node.ZIndex = entry.OriginalZ;
+            }
         Layouts.Remove(combat);
         Layouts.Add(combat, nodes.Select(node => new Placement(node)).ToList());
         Apply(combat, animate: false);
@@ -72,7 +84,7 @@ public static class FormationVisuals
             var owner = entry.Node.Entity.Player ?? entry.Node.Entity.PetOwner;
             if (owner is null || !offsets.TryGetValue(owner.NetId, out var goal)) continue;
             entry.Node.ZIndex = entry.OriginalZ + (ranks.Get(owner.NetId) == Rank.Front ? 1 : 0);
-            if (GodotObject.IsInstanceValid(entry.Tween)) entry.Tween!.Kill();
+            entry.StopTween();
             // 每帧只加本 Mod 的位移差，保留怪物、动画或其他游戏效果移动的距离。
             void Move(Vector2 offset)
             {
@@ -89,6 +101,28 @@ public static class FormationVisuals
                     .SetTrans(Tween.TransitionType.Sine).SetEase(Tween.EaseType.InOut);
             }
         }
+    }
+
+    internal static void Restore(ICombatState combat)
+    {
+        if (!Layouts.TryGetValue(combat, out var layout)) return;
+        Layouts.Remove(combat);
+        foreach (var entry in layout)
+        {
+            entry.StopTween();
+            if (!GodotObject.IsInstanceValid(entry.Node)) continue;
+            // 只撤回 FrontBack 已经施加的位移，保留游戏动画造成的位移。
+            entry.Node.Position -= entry.Offset;
+            entry.Node.ZIndex = entry.OriginalZ;
+            entry.Node.GetNodeOrNull<PanelContainer>("FrontBackRole")?.Hide();
+        }
+    }
+
+    private static NCombatRoom? FindRoom(Node node)
+    {
+        Node? ancestor = node.GetParent();
+        while (ancestor is not null && ancestor is not NCombatRoom) ancestor = ancestor.GetParent();
+        return ancestor as NCombatRoom;
     }
 
     private static void UpdateBadge(NCreature node, Rank rank, decimal percent)
@@ -112,10 +146,9 @@ public static class FormationVisuals
             node.Hitbox.ItemRectChanged += Reposition;
             Reposition();
 
-            Node? ancestor = node.GetParent();
-            while (ancestor is not null && ancestor is not NCombatRoom) ancestor = ancestor.GetParent();
-            if (ancestor is NCombatRoom room)
-                WatchCombatForeground(room, badgeNode, foreground => badgeNode.Visible = foreground);
+            if (FindRoom(node) is { } room)
+                WatchCombatForeground(room, badgeNode, foreground => badgeNode.Visible =
+                    foreground && node.Entity.CombatState is { } combat && Layouts.TryGetValue(combat, out _));
         }
         var color = RankStyle.Color(rank);
         badge.AddThemeStyleboxOverride("panel", RankStyle.Frame(color.Darkened(0.78f), color, 7, 3));
@@ -152,6 +185,12 @@ public static class FormationVisuals
 public static class LayoutPatch
 {
     public static void Postfix(List<NCreature> creatureNodes) => FormationVisuals.Capture(creatureNodes);
+}
+
+[HarmonyPatch(typeof(CombatRoom), nameof(CombatRoom.OnCombatEnded))]
+internal static class RestoreLayoutPatch
+{
+    private static void Postfix(CombatRoom __instance) => FormationVisuals.Restore(__instance.CombatState);
 }
 
 [HarmonyPatch(typeof(NCombatRoom), nameof(NCombatRoom.AddCreature))]

@@ -12,6 +12,7 @@ using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Models.Powers;
 using MegaCrit.Sts2.Core.MonsterMoves.Intents;
 using MegaCrit.Sts2.Core.Multiplayer.Serialization;
+using MegaCrit.Sts2.Core.Rooms;
 using MegaCrit.Sts2.Core.Runs;
 using MegaCrit.Sts2.Core.ValueProps;
 
@@ -110,7 +111,10 @@ static class Checks
         // 对本机真实 Hook 方法安装补丁并调用，验证插入位置与有效 IL，而非只测倍率函数。
         var harmony = new Harmony("FrontBack.Checks");
         harmony.PatchAll(typeof(ModEntry).Assembly);
-        Equal(10, harmony.GetPatchedMethods().Count(), "All game integration patches installed");
+        Equal(11, harmony.GetPatchedMethods().Count(), "All game integration patches installed");
+        var combatEnded = AccessTools.Method(typeof(CombatRoom), nameof(CombatRoom.OnCombatEnded));
+        Equal(true, Harmony.GetPatchInfo(combatEnded)?.Postfixes.Any(patch => patch.owner == harmony.Id) == true,
+            "Formation layout cleanup is attached to the victory path before rewards");
         BeforeCombatRulesPatch.Original(run, combat).GetAwaiter().GetResult();
         Equal(true, true, "Reverse patch invokes original pre-combat hooks without recursion");
         var hook = AccessTools.Method(typeof(Hook), "ModifyDamageInternal");
