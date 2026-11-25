@@ -17,8 +17,10 @@ public static class CombatOverlay
 {
     public static void Postfix(NCombatRoom __instance)
     {
-        if (!ModEntry.Ready || __instance.Mode != CombatRoomMode.ActiveCombat) return;
-        if (!FormationStore.Supports(RunManager.Instance.DebugOnlyGetState()?.Players.Count ?? 0)) return;
+        if (!ModEntry.Ready || !FormationStore.Supports(RunManager.Instance.DebugOnlyGetState()?.Players.Count ?? 0)) return;
+        FormationVisuals.WatchAllyVisibility(__instance);
+
+        if (__instance.Mode != CombatRoomMode.ActiveCombat) return;
         var board = new FormationBoard(__instance);
         board.Attach();
     }

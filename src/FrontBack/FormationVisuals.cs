@@ -7,7 +7,10 @@ using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Models.Monsters;
 using MegaCrit.Sts2.Core.Nodes.Combat;
 using MegaCrit.Sts2.Core.Nodes.Rooms;
+using MegaCrit.Sts2.Core.Nodes.Screens;
+using MegaCrit.Sts2.Core.Nodes.Screens.CardSelection;
 using MegaCrit.Sts2.Core.Nodes.Screens.Map;
+using MegaCrit.Sts2.Core.Nodes.Screens.Overlays;
 using MegaCrit.Sts2.Core.Nodes.Screens.ScreenContext;
 using MegaCrit.Sts2.Core.Rooms;
 
@@ -159,7 +162,33 @@ public static class FormationVisuals
         badge.ResetSize();
     }
 
-    internal static void WatchCombatForeground(NCombatRoom room, CanvasItem item, Action<bool> update)
+    internal static void WatchAllyVisibility(NCombatRoom room)
+    {
+        var allies = room.GetNode<Control>("%AllyContainer");
+        bool hiddenForScreen = false;
+        bool wasVisible = false;
+        WatchScreenChanges(allies, mapVisible =>
+        {
+            // 奖励与地图会把战斗房间留在背景中。隐藏父节点也会一起隐藏宠物。
+            bool hide = mapVisible || NOverlayStack.Instance?.Peek() is NRewardsScreen or NCardRewardSelectionScreen;
+            if (hide == hiddenForScreen) return;
+            hiddenForScreen = hide;
+            if (hide)
+            {
+                wasVisible = allies.Visible;
+                allies.Hide();
+            }
+            else
+            {
+                allies.Visible = wasVisible;
+            }
+        });
+    }
+
+    internal static void WatchCombatForeground(NCombatRoom room, CanvasItem item, Action<bool> update) =>
+        WatchScreenChanges(item, mapVisible => update(!mapVisible && ActiveScreenContext.Instance.IsCurrent(room)));
+
+    private static void WatchScreenChanges(CanvasItem item, Action<bool> update)
     {
         var screens = ActiveScreenContext.Instance;
         var map = NMapScreen.Instance;
@@ -167,7 +196,7 @@ public static class FormationVisuals
         {
             // 地图关闭动画结束后才会隐藏，战斗界面等地图收起后再恢复。
             bool mapVisible = map is not null && GodotObject.IsInstanceValid(map) && map.IsVisibleInTree();
-            update(!mapVisible && screens.IsCurrent(room));
+            update(mapVisible);
         }
 
         screens.Updated += Refresh;

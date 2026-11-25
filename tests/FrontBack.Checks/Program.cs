@@ -138,11 +138,14 @@ static class Checks
         Field(target, "_block", 8);
         var incoming = Damage(20); // 此时为后排，20 -> 10，再扣 8 点格挡。
         var blocked = target.DamageBlockInternal(incoming, ValueProp.Move);
-        target.LoseHpInternal(incoming - blocked, ValueProp.Move);
+        // v0.114.0 把第二个参数从伤害属性换成了 dryRun。
+        var loseHp = AccessTools.Method(typeof(Creature), nameof(Creature.LoseHpInternal));
+        object damageArg = loseHp.GetParameters()[1].ParameterType == typeof(ValueProp) ? ValueProp.Move : false;
+        loseHp.Invoke(target, [incoming - blocked, damageArg]);
         Equal(98, target.CurrentHp, "Vanilla block and HP methods: back 20 with 8 block loses 2 HP");
         Field(target, "_currentHp", 100);
         Field(target, "_block", 0);
-        target.LoseHpInternal(Damage(5), ValueProp.Move);
+        loseHp.Invoke(target, [Damage(5), damageArg]);
         Equal(98, target.CurrentHp, "Vanilla rounding: back 5 loses 2 HP");
         Equal(true, FormationStore.Get(null) is null, "No combat leaves damage unchanged");
         FormationStore.Get(combat)!.SetRules(new DamageRules { FrontPercent = 250.5m, BackPercent = 25.5m });

@@ -1,18 +1,18 @@
-# 多人前后排 Mod · v0.3.7
+# 多人前后排 Mod · v0.3.8
 
 支持《杀戮尖塔2》2–4 人联机。战斗中点击队友状态旁的「⇄ 队伍站位」，使用头像拖放和快捷按钮调整队形。默认前排承受怪物攻击伤害 150%，中排 100%，后排 50%。
 
-## v0.3.7 更新
+## v0.3.8 更新
 
-修复联机战斗结束后，前排队友可能在奖励界面穿模、挡住视线的问题。奖励出现前，角色和宠物会撤销前后排带来的位移和绘制层级调整，站位徽章也会隐藏。下一场战斗继续使用已保存的阵型。
+修复前排队友模型在战后奖励列表、三选一卡牌和地图上遮挡视线的问题。这些界面打开时，战斗场景中的己方角色及宠物会隐藏，地图收起动画结束后再恢复显示。下一场战斗继续使用已保存的阵型。
 
-已在游戏 v0.113.1 的程序集上通过 75 项自动检查。奖励画面仍待游戏内联机验证。
+游戏 v0.113.1 和 v0.114.0 均通过 75 项自动检查。用 v0.114.0 的本地双角色场景验证了奖励、三选一卡牌、地图收起和进入下一场战斗的显示。Steam 双端联机待验证。
 
 ## 安装
 
 可在 Steam 订阅，或从 GitHub 下载压缩包手动安装。[Steam 创意工坊](https://steamcommunity.com/sharedfiles/filedetails/?id=3843224315) · [GitHub 发布页](https://github.com/LHZZQ/FrontBack/releases)
 
-退出游戏，解压 `FrontBack-v0.3.7.zip`，将解压得到的 `FrontBack` 文件夹放入游戏安装目录下的 `mods` 文件夹。升级时，用新版 `FrontBack.dll` 和 `FrontBack.json` 替换旧文件，可保留现有的 `FrontBack.config.json`。联机前请确认所有玩家都更新到同一版本。
+退出游戏，解压 `FrontBack-v0.3.8.zip`，将解压得到的 `FrontBack` 文件夹放入游戏安装目录下的 `mods` 文件夹。升级时，用新版 `FrontBack.dll` 和 `FrontBack.json` 替换旧文件，可保留现有的 `FrontBack.config.json`。联机前请确认所有玩家都更新到同一版本。
 
 ### 与薄荷尖塔 2 联动
 
@@ -23,8 +23,8 @@
 ## 1. 本机环境
 
 - 游戏路径：`D:\steam\steamapps\common\Slay the Spire 2`
-- `release_info.json`：`v0.113.1`，commit `d09d48e5`，2026-11-14。
-- Steam：`public-beta` 分支，build ID `26660232`。
+- `release_info.json`：`v0.114.0`，commit `a7b9a9c0`，2026-11-25。
+- Steam：`public-beta` 分支，build ID `26909018`。
 - 游戏使用 .NET 9；本机 SDK 为 .NET 10.0.402，可以编译 net9.0。
 - 自动检查使用项目内 `.tools/runtime9` 的 .NET 9.0.7，与本机游戏一致。
 - 直接引用游戏自带的 `sts2.dll`、`GodotSharp.dll`、`0Harmony.dll`。**玩家无需安装 BaseLib、KitLib、RitsuLib 或其他前置 Mod。** 所有联机玩家需要相同版本的游戏和本 Mod。
